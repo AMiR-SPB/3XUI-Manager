@@ -194,6 +194,7 @@ chmod +x xui-manager.sh
 7) Change Panel Settings
 8) Set Automatic Backup
 9) Client Management
+10) Inbound Management
 0) Exit
 ```
 
