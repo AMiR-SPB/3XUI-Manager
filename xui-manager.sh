@@ -48,6 +48,7 @@ echo "6) Enable CLI Command"
 echo "7) Change Panel Settings"
 echo "8) Set Automatic Backup"
 echo "9) Client Management"
+echo "10) Inbound Management"
 echo "0) Exit"
 echo -e "${RESET}"
 }
@@ -1444,6 +1445,743 @@ echo ""
 }
 
 # =========================
+# MANAGE INBOUNDS
+# =========================
+manage_inbound_xui() {
+
+echo ""
+echo -e "${BLUE}======================================"
+echo "     INBOUND MANAGEMENT MODULE"
+echo "======================================"
+echo -e "${RESET}"
+
+DB_FILE="$DB_DIR/x-ui.db"
+
+if [[ ! -f "$DB_FILE" ]]; then
+    echo -e "${RED}❌ Database not found at $DB_FILE${RESET}"
+    echo -e "${YELLOW}💡 Make sure X-UI is installed.${RESET}"
+    sleep 2
+    return
+fi
+
+if ! command -v python3 &>/dev/null; then
+    echo -e "${RED}❌ python3 is required but not installed.${RESET}"
+    sleep 2
+    return
+fi
+
+# ── Select inbound ─────────────────────────────────────────────────
+echo ""
+echo -e "${YELLOW}📡 Inbound Selection:${RESET}"
+echo ""
+echo -e "  Enter inbound ${GREEN}ID${RESET}       (e.g. 42)"
+echo -e "  Enter inbound ${GREEN}name${RESET}     or part of it (e.g. user123)"
+echo -e "  Enter ${GREEN}all${RESET}              to apply to all inbounds"
+echo -e "  Enter ${GREEN}expired${RESET}          to apply to expired inbounds only"
+echo -e "  Enter ${GREEN}0${RESET}                to go back"
+echo ""
+read -p "Search / Select: " ib_input
+
+if [[ "$ib_input" == "0" ]]; then
+    return
+fi
+
+INBOUND_MODE=""
+SELECTED_IB_ID=""
+SELECTED_IB_NAME=""
+
+if [[ "${ib_input,,}" == "all" ]]; then
+    INBOUND_MODE="all"
+    echo -e "${GREEN}✅ Applying to ALL inbounds${RESET}"
+
+elif [[ "${ib_input,,}" == "expired" ]]; then
+    EXPIRED_COUNT=$(python3 -c "
+import sqlite3, time
+now_ms = int(time.time() * 1000)
+conn = sqlite3.connect('$DB_FILE')
+c = conn.cursor()
+c.execute('SELECT COUNT(*) FROM inbounds WHERE expiry_time > 0 AND expiry_time < ?', (now_ms,))
+print(c.fetchone()[0])
+conn.close()
+")
+    if [[ "$EXPIRED_COUNT" -eq 0 ]]; then
+        echo -e "${YELLOW}  No expired inbounds found.${RESET}"
+        return
+    fi
+    INBOUND_MODE="expired"
+    echo -e "${GREEN}✅ Applying to $EXPIRED_COUNT expired inbound(s)${RESET}"
+
+else
+    LOOKUP_RESULT=$(python3 << PYEOF
+import sqlite3, time, sys
+
+db = "$DB_FILE"
+query = """$ib_input"""
+now_ms = int(time.time() * 1000)
+
+conn = sqlite3.connect(db)
+c = conn.cursor()
+
+if query.isdigit():
+    c.execute("SELECT id, remark, enable, expiry_time, total, up, down FROM inbounds WHERE id = ?", (int(query),))
+    rows = c.fetchall()
+else:
+    c.execute("SELECT id, remark, enable, expiry_time, total, up, down FROM inbounds WHERE LOWER(remark) LIKE LOWER(?)", (f"%{query}%",))
+    rows = c.fetchall()
+
+conn.close()
+
+if not rows:
+    print("NOTFOUND")
+elif len(rows) == 1:
+    r = rows[0]
+    print(f"SINGLE|{r[0]}|{r[1]}")
+else:
+    print(f"MULTI|{len(rows)}")
+    for i, r in enumerate(rows):
+        iid, remark, enable, exp, total, up, down = r
+        status = "ON" if enable else "OFF"
+        if not exp or exp == 0:
+            exp_str = "unlimited"
+        elif exp < now_ms:
+            exp_str = f"expired({time.strftime('%Y-%m-%d', time.localtime(exp/1000))})"
+        else:
+            exp_str = time.strftime('%Y-%m-%d', time.localtime(exp/1000))
+        print(f"  {i+1}) [{iid}] {remark}  |  {status}  |  exp:{exp_str}")
+PYEOF
+)
+
+    FIRST_WORD=$(echo "$LOOKUP_RESULT" | head -1 | cut -d'|' -f1)
+
+    if [[ "$FIRST_WORD" == "NOTFOUND" ]]; then
+        echo -e "${RED}❌ No inbound found matching: $ib_input${RESET}"
+        return
+
+    elif [[ "$FIRST_WORD" == "SINGLE" ]]; then
+        SELECTED_IB_ID=$(echo "$LOOKUP_RESULT" | head -1 | cut -d'|' -f2)
+        SELECTED_IB_NAME=$(echo "$LOOKUP_RESULT" | head -1 | cut -d'|' -f3)
+        INBOUND_MODE="single"
+        echo -e "${GREEN}✅ Selected:${RESET} [$SELECTED_IB_ID] $SELECTED_IB_NAME"
+
+    elif [[ "$FIRST_WORD" == "MULTI" ]]; then
+        MATCH_COUNT=$(echo "$LOOKUP_RESULT" | head -1 | cut -d'|' -f2)
+        echo -e "${YELLOW}🔎 Found $MATCH_COUNT matches:${RESET}"
+        echo ""
+        echo "$LOOKUP_RESULT" | tail -n +2
+        echo ""
+        read -p "Enter number to select (or 0 to cancel): " multi_choice
+
+        if [[ "$multi_choice" == "0" ]]; then
+            return
+        fi
+
+        MULTI_LINE=$(echo "$LOOKUP_RESULT" | tail -n +2 | sed -n "${multi_choice}p")
+        if [[ -z "$MULTI_LINE" ]]; then
+            echo -e "${RED}❌ Invalid selection${RESET}"
+            return
+        fi
+
+        SELECTED_IB_ID=$(echo "$MULTI_LINE" | grep -oP '(?<=\[)\d+(?=\])')
+        SELECTED_IB_NAME=$(echo "$MULTI_LINE" | grep -oP '(?<=\] ).*?(?=  \|)')
+        INBOUND_MODE="single"
+        echo -e "${GREEN}✅ Selected:${RESET} [$SELECTED_IB_ID] $SELECTED_IB_NAME"
+    fi
+fi
+
+# ── Show current info ──────────────────────────────────────────────
+echo ""
+python3 << PYEOF
+import sqlite3, time
+
+db = "$DB_FILE"
+iid = "$SELECTED_IB_ID"
+mode = "$INBOUND_MODE"
+now_ms = int(time.time() * 1000)
+
+conn = sqlite3.connect(db)
+c = conn.cursor()
+
+if mode == "all":
+    c.execute("SELECT id, remark, enable, expiry_time, total, up, down FROM inbounds ORDER BY id")
+elif mode == "expired":
+    c.execute("SELECT id, remark, enable, expiry_time, total, up, down FROM inbounds WHERE expiry_time > 0 AND expiry_time < ? ORDER BY id", (now_ms,))
+else:
+    c.execute("SELECT id, remark, enable, expiry_time, total, up, down FROM inbounds WHERE id = ?", (int(iid),))
+
+rows = c.fetchall()
+conn.close()
+
+print(f"  {'ID':<6} {'Name':<25} {'Status':<8} {'Expiry':<22} {'Traffic'}")
+print("  " + "-"*80)
+for r in rows:
+    iid2, remark, enable, exp, total, up, down = r
+    status = "ON " if enable else "OFF"
+    if not exp or exp == 0:
+        exp_str = "Unlimited"
+    elif exp < now_ms:
+        exp_str = f"Expired ({time.strftime('%Y-%m-%d', time.localtime(exp/1000))})"
+    else:
+        exp_str = time.strftime('%Y-%m-%d', time.localtime(exp/1000))
+    if not total or total == 0:
+        vol_str = "Unlimited"
+    else:
+        total_gb = total / (1024**3)
+        used_gb  = ((up or 0) + (down or 0)) / (1024**3)
+        vol_str  = f"{used_gb:.1f}/{total_gb:.1f}GB"
+    print(f"  {iid2:<6} {remark:<25} {status:<8} {exp_str:<22} {vol_str}")
+PYEOF
+
+
+# ── Sub-menu ───────────────────────────────────────────────────────
+echo -e "${BLUE}--- What do you want to change? ---${RESET}"
+echo "1) Enable / Disable inbound"
+echo "2) Add days to expiry"
+echo "3) Subtract days from expiry"
+echo "4) Set expiry to a specific date"
+echo "5) Remove expiry (make unlimited)"
+echo "6) Add volume (GB)"
+echo "7) Subtract volume (GB)"
+echo "8) Set total volume (GB)"
+echo "9) Remove volume limit (make unlimited)"
+echo "0) Back"
+echo ""
+read -p "Select option: " ib_action
+
+case "$ib_action" in
+
+# ── 1) Enable / Disable ───────────────────────────────────────────
+1)
+    echo ""
+    if [[ "$INBOUND_MODE" == "single" ]]; then
+        CURRENT_ENABLE=$(python3 -c "
+import sqlite3
+conn = sqlite3.connect('$DB_FILE')
+c = conn.cursor()
+c.execute('SELECT enable FROM inbounds WHERE id = ?', ($SELECTED_IB_ID,))
+r = c.fetchone()
+conn.close()
+print(r[0] if r else 0)
+")
+        if [[ "$CURRENT_ENABLE" == "1" ]]; then
+            echo -e "  Current status: ${GREEN}Enabled${RESET}"
+            echo "  1) Disable"
+            echo "  2) Keep enabled"
+        else
+            echo -e "  Current status: ${RED}Disabled${RESET}"
+            echo "  1) Enable"
+            echo "  2) Keep disabled"
+        fi
+        echo ""
+        read -p "  Select: " toggle_choice
+        if [[ "$toggle_choice" != "1" ]]; then
+            echo -e "${YELLOW}No change made.${RESET}"
+            return
+        fi
+        if [[ "$CURRENT_ENABLE" == "1" ]]; then NEW_ENABLE=0; LABEL="Disabled"
+        else NEW_ENABLE=1; LABEL="Enabled"; fi
+        python3 -c "
+import sqlite3
+conn = sqlite3.connect('$DB_FILE')
+c = conn.cursor()
+c.execute('UPDATE inbounds SET enable = ? WHERE id = ?', ($NEW_ENABLE, $SELECTED_IB_ID))
+conn.commit()
+conn.close()
+"
+        echo -e "${GREEN}✅ Inbound $SELECTED_IB_NAME -> $LABEL${RESET}"
+    else
+        echo "  1) Enable all selected inbounds"
+        echo "  2) Disable all selected inbounds"
+        echo ""
+        read -p "  Select: " toggle_choice
+        if [[ "$toggle_choice" != "1" && "$toggle_choice" != "2" ]]; then
+            echo -e "${YELLOW}No change made.${RESET}"
+            return
+        fi
+        NEW_ENABLE=$(( toggle_choice == 1 ? 1 : 0 ))
+        LABEL=$(( toggle_choice == 1 ? 1 : 0 ))
+        python3 << PYEOF
+import sqlite3, time
+db = "$DB_FILE"
+mode = "$INBOUND_MODE"
+new_enable = $NEW_ENABLE
+now_ms = int(time.time() * 1000)
+conn = sqlite3.connect(db)
+c = conn.cursor()
+if mode == "all":
+    c.execute("SELECT id, remark FROM inbounds")
+else:
+    c.execute("SELECT id, remark FROM inbounds WHERE expiry_time > 0 AND expiry_time < ?", (now_ms,))
+rows = c.fetchall()
+for iid, remark in rows:
+    c.execute("UPDATE inbounds SET enable = ? WHERE id = ?", (new_enable, iid))
+    state = "enabled" if new_enable else "disabled"
+    print(f"  [{iid}] {remark:<25}  -> {state}")
+conn.commit()
+conn.close()
+print(f"  Done: {len(rows)} inbound(s) updated.")
+PYEOF
+    fi
+    ;;
+
+# ── 2) Add days ───────────────────────────────────────────────────
+2)
+    echo ""
+    read -p "📅 How many days to add? " days
+    if ! [[ "$days" =~ ^[0-9]+$ ]] || (( days < 1 )); then
+        echo -e "${RED}❌ Invalid number${RESET}"
+        return
+    fi
+
+    python3 << PYEOF
+import sqlite3, time
+
+db = "$DB_FILE"
+mode = "$INBOUND_MODE"
+iid_raw = "$SELECTED_IB_ID"
+days = $days
+delta_ms = days * 24 * 60 * 60 * 1000
+now_ms = int(time.time() * 1000)
+
+conn = sqlite3.connect(db)
+c = conn.cursor()
+
+if mode == "all":
+    c.execute("SELECT id FROM inbounds")
+    ids = [r[0] for r in c.fetchall()]
+elif mode == "expired":
+    c.execute("SELECT id FROM inbounds WHERE expiry_time > 0 AND expiry_time < ?", (now_ms,))
+    ids = [r[0] for r in c.fetchall()]
+else:
+    ids = [int(iid_raw)]
+
+total_updated = 0
+skipped = 0
+for iid in ids:
+    c.execute("SELECT remark, expiry_time FROM inbounds WHERE id = ?", (iid,))
+    r = c.fetchone()
+    if not r:
+        continue
+    remark, exp = r
+    exp = exp or 0
+    if exp == 0:
+        print(f"  [{iid}] {remark:<25}  Unlimited expiry — skipped.")
+        skipped += 1
+        continue
+    base = exp if exp > now_ms else now_ms
+    new_exp = base + delta_ms
+    c.execute("UPDATE inbounds SET expiry_time = ?, enable = 1 WHERE id = ?", (new_exp, iid))
+    old_str = time.strftime("%Y-%m-%d", time.localtime(exp/1000))
+    new_str = time.strftime("%Y-%m-%d", time.localtime(new_exp/1000))
+    print(f"  [{iid}] {remark:<25}  {old_str}  ->  {new_str}")
+    total_updated += 1
+
+conn.commit()
+conn.close()
+print(f"  Updated {total_updated} inbound(s)" + (f", skipped {skipped} unlimited." if skipped else "."))
+PYEOF
+    echo -e "${GREEN}✅ Done${RESET}"
+    ;;
+
+# ── 3) Subtract days ──────────────────────────────────────────────
+3)
+    echo ""
+    read -p "📅 How many days to subtract? " days
+    if ! [[ "$days" =~ ^[0-9]+$ ]] || (( days < 1 )); then
+        echo -e "${RED}❌ Invalid number${RESET}"
+        return
+    fi
+
+    python3 << PYEOF
+import sqlite3, time
+
+db = "$DB_FILE"
+mode = "$INBOUND_MODE"
+iid_raw = "$SELECTED_IB_ID"
+days = $days
+delta_ms = days * 24 * 60 * 60 * 1000
+now_ms = int(time.time() * 1000)
+
+conn = sqlite3.connect(db)
+c = conn.cursor()
+
+if mode == "all":
+    c.execute("SELECT id FROM inbounds")
+    ids = [r[0] for r in c.fetchall()]
+elif mode == "expired":
+    c.execute("SELECT id FROM inbounds WHERE expiry_time > 0 AND expiry_time < ?", (now_ms,))
+    ids = [r[0] for r in c.fetchall()]
+else:
+    ids = [int(iid_raw)]
+
+total_updated = 0
+skipped = 0
+for iid in ids:
+    c.execute("SELECT remark, expiry_time FROM inbounds WHERE id = ?", (iid,))
+    r = c.fetchone()
+    if not r:
+        continue
+    remark, exp = r
+    exp = exp or 0
+    if exp == 0:
+        print(f"  [{iid}] {remark:<25}  Unlimited expiry — skipped.")
+        skipped += 1
+        continue
+    new_exp = max(0, exp - delta_ms)
+    disabled = new_exp < now_ms
+    c.execute("UPDATE inbounds SET expiry_time = ?, enable = ? WHERE id = ?", (new_exp, 0 if disabled else 1, iid))
+    old_str = time.strftime("%Y-%m-%d", time.localtime(exp/1000))
+    new_str = time.strftime("%Y-%m-%d", time.localtime(new_exp/1000)) if new_exp > 0 else "Expired"
+    flag = " [disabled]" if disabled else ""
+    print(f"  [{iid}] {remark:<25}  {old_str}  ->  {new_str}{flag}")
+    total_updated += 1
+
+conn.commit()
+conn.close()
+print(f"  Updated {total_updated} inbound(s)" + (f", skipped {skipped} unlimited." if skipped else "."))
+PYEOF
+    echo -e "${GREEN}✅ Done${RESET}"
+    ;;
+
+# ── 4) Set specific date ──────────────────────────────────────────
+4)
+    echo ""
+    read -p "📅 Enter new expiry date (YYYY-MM-DD): " date_input
+    if ! [[ "$date_input" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+        echo -e "${RED}❌ Invalid date format. Use YYYY-MM-DD${RESET}"
+        return
+    fi
+
+    python3 << PYEOF
+import sqlite3, time
+
+db = "$DB_FILE"
+mode = "$INBOUND_MODE"
+iid_raw = "$SELECTED_IB_ID"
+date_str = "$date_input"
+now_ms = int(time.time() * 1000)
+
+try:
+    new_exp = int(time.mktime(time.strptime(date_str + " 23:59", "%Y-%m-%d %H:%M")) * 1000)
+except Exception as e:
+    print(f"  Date parse error: {e}")
+    exit(1)
+
+conn = sqlite3.connect(db)
+c = conn.cursor()
+
+if mode == "all":
+    c.execute("SELECT id FROM inbounds")
+    ids = [r[0] for r in c.fetchall()]
+elif mode == "expired":
+    c.execute("SELECT id FROM inbounds WHERE expiry_time > 0 AND expiry_time < ?", (now_ms,))
+    ids = [r[0] for r in c.fetchall()]
+else:
+    ids = [int(iid_raw)]
+
+active = new_exp > now_ms
+total_updated = 0
+skipped = 0
+for iid in ids:
+    c.execute("SELECT remark, expiry_time FROM inbounds WHERE id = ?", (iid,))
+    r = c.fetchone()
+    if not r:
+        continue
+    remark, old_exp = r
+    old_exp = old_exp or 0
+    if old_exp == 0 and mode in ("all",):
+        print(f"  [{iid}] {remark:<25}  Unlimited expiry — skipped.")
+        skipped += 1
+        continue
+    c.execute("UPDATE inbounds SET expiry_time = ?, enable = ? WHERE id = ?", (new_exp, 1 if active else 0, iid))
+    old_str = time.strftime("%Y-%m-%d", time.localtime(old_exp/1000)) if old_exp else "No expiry"
+    flag = "[enabled]" if active else "[disabled]"
+    print(f"  [{iid}] {remark:<25}  {old_str}  ->  {date_str}  {flag}")
+    total_updated += 1
+
+conn.commit()
+conn.close()
+print(f"  Updated {total_updated} inbound(s)" + (f", skipped {skipped} unlimited." if skipped else "."))
+PYEOF
+    echo -e "${GREEN}✅ Done${RESET}"
+    ;;
+
+# ── 5) Remove expiry ──────────────────────────────────────────────
+5)
+    echo ""
+    read -p "⚠️  Remove expiry limit from selected inbound(s)? (y/n): " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo -e "${YELLOW}Cancelled.${RESET}"
+        return
+    fi
+    python3 << PYEOF
+import sqlite3, time
+db = "$DB_FILE"
+mode = "$INBOUND_MODE"
+iid_raw = "$SELECTED_IB_ID"
+now_ms = int(time.time() * 1000)
+conn = sqlite3.connect(db)
+c = conn.cursor()
+if mode == "all":
+    c.execute("UPDATE inbounds SET expiry_time = 0, enable = 1")
+    c.execute("SELECT changes()")
+    n = c.fetchone()[0]
+elif mode == "expired":
+    c.execute("SELECT id FROM inbounds WHERE expiry_time > 0 AND expiry_time < ?", (now_ms,))
+    ids = [r[0] for r in c.fetchall()]
+    for iid in ids:
+        c.execute("UPDATE inbounds SET expiry_time = 0, enable = 1 WHERE id = ?", (iid,))
+    n = len(ids)
+else:
+    c.execute("UPDATE inbounds SET expiry_time = 0, enable = 1 WHERE id = ?", (int(iid_raw),))
+    n = 1
+conn.commit()
+conn.close()
+print(f"  Expiry removed from {n} inbound(s) -> set to unlimited and enabled.")
+PYEOF
+    echo -e "${GREEN}✅ Done${RESET}"
+    ;;
+
+# ── 6) Add volume ─────────────────────────────────────────────────
+6)
+    echo ""
+    read -p "📦 How many GB to add? " gb
+    if ! [[ "$gb" =~ ^[0-9]+(\.[0-9]+)?$ ]] || (( $(echo "$gb <= 0" | bc -l) )); then
+        echo -e "${RED}❌ Invalid number${RESET}"
+        return
+    fi
+
+    python3 << PYEOF
+import sqlite3, time
+
+db = "$DB_FILE"
+mode = "$INBOUND_MODE"
+iid_raw = "$SELECTED_IB_ID"
+gb = $gb
+delta = int(gb * 1024 * 1024 * 1024)
+now_ms = int(time.time() * 1000)
+
+conn = sqlite3.connect(db)
+c = conn.cursor()
+
+if mode == "all":
+    c.execute("SELECT id FROM inbounds")
+    ids = [r[0] for r in c.fetchall()]
+elif mode == "expired":
+    c.execute("SELECT id FROM inbounds WHERE expiry_time > 0 AND expiry_time < ?", (now_ms,))
+    ids = [r[0] for r in c.fetchall()]
+else:
+    ids = [int(iid_raw)]
+
+total_updated = 0
+skipped = 0
+for iid in ids:
+    c.execute("SELECT remark, total, up, down FROM inbounds WHERE id = ?", (iid,))
+    r = c.fetchone()
+    if not r:
+        continue
+    remark, total, up, down = r
+    total = total or 0
+    if total == 0:
+        print(f"  [{iid}] {remark:<25}  Unlimited volume — skipped.")
+        skipped += 1
+        continue
+    used = (up or 0) + (down or 0)
+    new_total = total + delta
+    c.execute("UPDATE inbounds SET total = ? WHERE id = ?", (new_total, iid))
+    if used < new_total:
+        c.execute("UPDATE inbounds SET enable = 1 WHERE id = ?", (iid,))
+    old_gb = total / (1024**3)
+    new_gb = new_total / (1024**3)
+    print(f"  [{iid}] {remark:<25}  {old_gb:.1f}GB  ->  {new_gb:.1f}GB  (+{gb}GB)")
+    total_updated += 1
+
+conn.commit()
+conn.close()
+print(f"  Updated {total_updated} inbound(s)" + (f", skipped {skipped} unlimited." if skipped else "."))
+PYEOF
+    echo -e "${GREEN}✅ Done${RESET}"
+    ;;
+
+# ── 7) Subtract volume ────────────────────────────────────────────
+7)
+    echo ""
+    read -p "📦 How many GB to subtract? " gb
+    if ! [[ "$gb" =~ ^[0-9]+(\.[0-9]+)?$ ]] || (( $(echo "$gb <= 0" | bc -l) )); then
+        echo -e "${RED}❌ Invalid number${RESET}"
+        return
+    fi
+
+    python3 << PYEOF
+import sqlite3, time
+
+db = "$DB_FILE"
+mode = "$INBOUND_MODE"
+iid_raw = "$SELECTED_IB_ID"
+gb = $gb
+delta = int(gb * 1024 * 1024 * 1024)
+now_ms = int(time.time() * 1000)
+
+conn = sqlite3.connect(db)
+c = conn.cursor()
+
+if mode == "all":
+    c.execute("SELECT id FROM inbounds")
+    ids = [r[0] for r in c.fetchall()]
+elif mode == "expired":
+    c.execute("SELECT id FROM inbounds WHERE expiry_time > 0 AND expiry_time < ?", (now_ms,))
+    ids = [r[0] for r in c.fetchall()]
+else:
+    ids = [int(iid_raw)]
+
+total_updated = 0
+skipped = 0
+for iid in ids:
+    c.execute("SELECT remark, total, up, down FROM inbounds WHERE id = ?", (iid,))
+    r = c.fetchone()
+    if not r:
+        continue
+    remark, total, up, down = r
+    total = total or 0
+    if total == 0:
+        print(f"  [{iid}] {remark:<25}  Unlimited volume — skipped.")
+        skipped += 1
+        continue
+    used = (up or 0) + (down or 0)
+    new_total = max(0, total - delta)
+    disabled = new_total > 0 and used >= new_total
+    c.execute("UPDATE inbounds SET total = ?, enable = ? WHERE id = ?", (new_total, 0 if disabled else 1, iid))
+    old_gb = total / (1024**3)
+    new_gb = new_total / (1024**3)
+    flag = " [disabled]" if disabled else ""
+    print(f"  [{iid}] {remark:<25}  {old_gb:.1f}GB  ->  {new_gb:.1f}GB  (-{gb}GB){flag}")
+    total_updated += 1
+
+conn.commit()
+conn.close()
+print(f"  Updated {total_updated} inbound(s)" + (f", skipped {skipped} unlimited." if skipped else "."))
+PYEOF
+    echo -e "${GREEN}✅ Done${RESET}"
+    ;;
+
+# ── 8) Set total volume ───────────────────────────────────────────
+8)
+    echo ""
+    read -p "📦 Enter new total volume in GB: " gb
+    if ! [[ "$gb" =~ ^[0-9]+(\.[0-9]+)?$ ]] || (( $(echo "$gb <= 0" | bc -l) )); then
+        echo -e "${RED}❌ Invalid number${RESET}"
+        return
+    fi
+
+    python3 << PYEOF
+import sqlite3, time
+
+db = "$DB_FILE"
+mode = "$INBOUND_MODE"
+iid_raw = "$SELECTED_IB_ID"
+gb = $gb
+new_total = int(gb * 1024 * 1024 * 1024)
+now_ms = int(time.time() * 1000)
+
+conn = sqlite3.connect(db)
+c = conn.cursor()
+
+if mode == "all":
+    c.execute("SELECT id FROM inbounds")
+    ids = [r[0] for r in c.fetchall()]
+elif mode == "expired":
+    c.execute("SELECT id FROM inbounds WHERE expiry_time > 0 AND expiry_time < ?", (now_ms,))
+    ids = [r[0] for r in c.fetchall()]
+else:
+    ids = [int(iid_raw)]
+
+total_updated = 0
+skipped = 0
+for iid in ids:
+    c.execute("SELECT remark, total, up, down FROM inbounds WHERE id = ?", (iid,))
+    r = c.fetchone()
+    if not r:
+        continue
+    remark, total, up, down = r
+    total = total or 0
+    if total == 0 and mode in ("all",):
+        print(f"  [{iid}] {remark:<25}  Unlimited volume — skipped.")
+        skipped += 1
+        continue
+    used = (up or 0) + (down or 0)
+    disabled = used >= new_total
+    c.execute("UPDATE inbounds SET total = ?, enable = ? WHERE id = ?", (new_total, 0 if disabled else 1, iid))
+    old_gb = total / (1024**3)
+    flag = "[disabled]" if disabled else "[enabled]"
+    print(f"  [{iid}] {remark:<25}  {old_gb:.1f}GB  ->  {gb}GB  {flag}")
+    total_updated += 1
+
+conn.commit()
+conn.close()
+print(f"  Updated {total_updated} inbound(s)" + (f", skipped {skipped} unlimited." if skipped else "."))
+PYEOF
+    echo -e "${GREEN}✅ Done${RESET}"
+    ;;
+
+# ── 9) Remove volume limit ────────────────────────────────────────
+9)
+    echo ""
+    read -p "⚠️  Remove volume limit from selected inbound(s)? (y/n): " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo -e "${YELLOW}Cancelled.${RESET}"
+        return
+    fi
+    python3 << PYEOF
+import sqlite3, time
+db = "$DB_FILE"
+mode = "$INBOUND_MODE"
+iid_raw = "$SELECTED_IB_ID"
+now_ms = int(time.time() * 1000)
+conn = sqlite3.connect(db)
+c = conn.cursor()
+if mode == "all":
+    c.execute("UPDATE inbounds SET total = 0, enable = 1")
+    c.execute("SELECT changes()")
+    n = c.fetchone()[0]
+elif mode == "expired":
+    c.execute("SELECT id FROM inbounds WHERE expiry_time > 0 AND expiry_time < ?", (now_ms,))
+    ids = [r[0] for r in c.fetchall()]
+    for iid in ids:
+        c.execute("UPDATE inbounds SET total = 0, enable = 1 WHERE id = ?", (iid,))
+    n = len(ids)
+else:
+    c.execute("UPDATE inbounds SET total = 0, enable = 1 WHERE id = ?", (int(iid_raw),))
+    n = 1
+conn.commit()
+conn.close()
+print(f"  Volume limit removed from {n} inbound(s) -> set to unlimited and enabled.")
+PYEOF
+    echo -e "${GREEN}✅ Done${RESET}"
+    ;;
+
+0)
+    return
+    ;;
+
+*)
+    echo -e "${RED}❌ Invalid option${RESET}"
+    return
+    ;;
+esac
+
+# ── Restart service ───────────────────────────────────────────────
+echo ""
+echo -e "${YELLOW}🔄 Restarting X-UI to apply changes...${RESET}"
+systemctl restart $SERVICE
+sleep 2
+
+if systemctl is-active --quiet $SERVICE; then
+    echo -e "${GREEN}✅ Changes applied and service restarted.${RESET}"
+else
+    echo -e "${RED}❌ Service failed to restart${RESET}"
+fi
+}
+
+# =========================
 # MAIN LOOP
 # =========================
 while true; do
@@ -1463,6 +2201,7 @@ case $choice in
     7) change_settings_xui ;;
     8) auto_backup_xui ;;
     9) manage_expiry_xui ;;
+    10) manage_inbound_xui ;;
     0)
         echo -e "${RED}Exiting...${RESET}"
         exit 0
