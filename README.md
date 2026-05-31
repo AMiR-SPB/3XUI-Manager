@@ -1,145 +1,179 @@
-# X-UI Manager Script
+# 🚀 X-UI Manager Script
 
-A powerful all-in-one Bash management script for **3x-ui / X-UI** servers.
+<div align="center">
 
-Developed to simplify installation, updating, backup management, client administration, and daily maintenance of X-UI panels.
+### ⚡ Powerful All-in-One Management Script for 3x-ui / X-UI
+
+**Install • Update • Backup • Restore • Client Management • Automation**
+
+Developed with ❤️ by **AMiR SPB**
+
+</div>
 
 ---
 
-## Features
+## ✨ Features
 
-### Installation
+### 📦 Installation
 
-* Install 3x-ui from local `.tar.gz` package
-* Automatic architecture detection
-* Automatic service setup and enable on boot
-* Automatic GeoIP & GeoSite installation
-* Displays panel URL and default credentials after installation
+* ✅ Install 3x-ui from local `.tar.gz` package
+* ✅ Automatic CPU architecture detection
+* ✅ Automatic systemd service configuration
+* ✅ Automatic GeoIP & GeoSite installation
+* ✅ Displays panel URL and login information after installation
 
-### Update System
+---
 
-* Safe update process
-* Automatic database backup before update
-* Option to:
+### 🔄 Update System
 
-  * Keep existing users and inbounds
-  * Start with a fresh database
-* Automatic rollback if update fails
+* ✅ Safe update process
+* ✅ Automatic database backup before update
+* ✅ Keep existing users and inbounds
+* ✅ Fresh database installation option
+* ✅ Automatic rollback if update fails
 
-### Backup & Restore
+---
 
-* Full backup
-* Database-only backup
-* Full restore
-* Database-only restore
-* Backup archive management
+### 💾 Backup & Restore
 
-### Automatic Backup Module
+#### 📥 Backup
 
-* Scheduled backups using Cron
-* Local backup storage
-* Remote backup synchronization
-* Multiple remote server support
-* Automatic cleanup of old backups
-* Rsync-based transfer
+* Full Backup
+* Database Only Backup
+* Compressed Archive Generation
 
-### Service Management
+#### ♻️ Restore
 
-* Service status monitoring
-* Startup status check
-* Uptime information
-* Last service logs
-* Panel information display
+* Full Restore
+* Database Only Restore
+* Automatic Service Restart
 
-### Panel Settings Management
+---
 
-Change directly from terminal:
+### ☁️ Automatic Backup Module
 
-* Panel Port
-* Username
-* Password
-* Web Path
+* 📅 Scheduled backups via Cron
+* 📁 Local backup storage
+* 🌐 Remote backup synchronization
+* 🖥️ Multi-server backup support
+* 🧹 Automatic old backup cleanup
+* ⚡ Rsync-based transfers
 
-No manual database editing required.
+---
 
-### Client Management
+### 📊 Service Monitoring
 
-Manage all users directly from X-UI database.
+View directly from the terminal:
 
-#### Expiry Management
+* 🟢 Service Status
+* 🔁 Auto Start Status
+* ⏱️ Uptime Information
+* 📜 Last Log Entries
+* 🌍 Panel Information
+* 👤 Username
+* 🔗 Web Path
+* 🚪 Port Information
 
-* Add days to clients
-* Subtract days from clients
-* Apply to:
+---
 
-  * All clients
-  * Active clients
-  * Expired clients
+### ⚙️ Panel Settings Management
 
-#### Traffic Management
+Manage your panel without editing databases manually:
 
-* Add traffic quota (GB)
-* Subtract traffic quota (GB)
-* Apply to:
+* 🌐 Change Port
+* 👤 Change Username
+* 🔐 Change Password
+* 🔗 Change Web Path
+* ♻️ Automatic Service Restart
 
-  * All clients
-  * Active clients
-  * Limited clients
+---
 
-#### Inbound Selection
+### 👥 Advanced Client Management
 
-* Single inbound
-* All inbounds
+Manage users directly from the X-UI database.
 
-### CLI Integration
+#### 📅 Expiry Management
 
-Enable global command:
+* ➕ Add Days
+* ➖ Subtract Days
+* 🎯 Apply to Expired Clients
+* 🎯 Apply to Active Clients
+* 🎯 Apply to All Clients
+
+#### 📦 Traffic Management
+
+* ➕ Add Volume (GB)
+* ➖ Subtract Volume (GB)
+* 🚫 Skip Unlimited Users
+* 📊 Active Client Filtering
+* 📊 Limited Client Filtering
+
+#### 📡 Inbound Selection
+
+* Single Inbound
+* All Inbounds
+* Smart Client Detection
+
+---
+
+### 💻 CLI Integration
+
+Enable the official X-UI command globally:
 
 ```bash
 x-ui
 ```
 
-Access the official X-UI management script from anywhere.
-
-### Full Removal
-
-* Complete uninstall
-* Optional backup before removal
-* Service cleanup
-* Database cleanup
-* Log cleanup
-* Optional reboot
+Access the X-UI management menu from anywhere in the terminal.
 
 ---
 
-## Requirements
+### 🗑️ Full Removal
 
-* Debian / Ubuntu
-* Root access
+* 🛑 Stop Service
+* ❌ Remove X-UI Files
+* ❌ Remove Databases
+* ❌ Remove Logs
+* ❌ Remove Service Files
+* 💾 Optional Backup Before Removal
+* 🔄 Optional Reboot
+
+---
+
+## 🖥️ Requirements
+
+### Supported Systems
+
+* ✅ Debian
+* ✅ Ubuntu
+* ✅ Other Systemd-based Linux Distributions
+
+### Required Packages
+
 * Bash
 * Python3
 * Systemd
 
-Optional:
+### Optional Packages
 
 * sshpass
 * rsync
 
 ---
 
-## Installation
-
-Download the script:
+## 🏗️ Installation
 
 ```bash
 wget https://raw.githubusercontent.com/YOUR_USERNAME/xui-manager/main/xui-manager.sh
+
 chmod +x xui-manager.sh
+
 ./xui-manager.sh
 ```
 
 ---
 
-## Menu
+## 📋 Main Menu
 
 ```text
 1) Install 3x-ui
@@ -156,34 +190,37 @@ chmod +x xui-manager.sh
 
 ---
 
-## Supported Architectures
+## 🧠 Supported Architectures
 
-* AMD64
-* ARM64
-* ARMv7
+| Architecture | Supported |
+| ------------ | --------- |
+| AMD64        | ✅         |
+| ARM64        | ✅         |
+| ARMv7        | ✅         |
 
-Automatic detection is performed during installation and update.
-
----
-
-## Security Notice
-
-After first login:
-
-* Change default username
-* Change default password
-* Change panel port
-* Change web path
-
-Never keep default credentials on a production server.
+Automatic detection is performed during installation and updates.
 
 ---
 
-## Author
+## 🔒 Security Recommendations
+
+After the first login:
+
+* 🔐 Change the default password
+* 👤 Change the default username
+* 🌐 Change the default port
+* 🔗 Change the web path
+* 🛡️ Restrict panel access when possible
+
+**Never use default credentials on production servers.**
+
+---
+
+## 👨‍💻 Author
 
 **AMiR SPB**
 
-Telegram:
+📨 Telegram:
 
 ```text
 @Amir_SPB
@@ -191,8 +228,24 @@ Telegram:
 
 ---
 
-## License
+## ❤️ Special Notes
 
-This project is provided as-is without warranty.
+This project was created to simplify X-UI management and reduce repetitive administrative tasks.
 
-Use at your own risk.
+If this project helps you, consider giving it a ⭐ on GitHub.
+
+---
+
+## 📜 License
+
+This project is provided **AS IS** without warranty.
+
+Use at your own responsibility.
+
+---
+
+<div align="center">
+
+### ⭐ Star the repository if you find it useful ⭐
+
+</div>
