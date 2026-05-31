@@ -1,5 +1,5 @@
 <div align="center">
-# 🚀 X-UI Manager Script
+🚀 X-UI Manager Script
 
 
 ### ⚡ Powerful All-in-One Management Script for 3x-ui / X-UI
