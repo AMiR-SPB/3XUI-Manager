@@ -173,7 +173,7 @@ Access the X-UI management menu from anywhere in the terminal.
 ## 🏗️ Installation
 
 ```bash
-wget https://raw.githubusercontent.com/YOUR_USERNAME/xui-manager/main/xui-manager.sh
+wget https://raw.githubusercontent.com/AMiR-SPB/xui-manager/main/xui-manager.sh
 
 chmod +x xui-manager.sh
 
