@@ -1,6 +1,8 @@
+<div align="center">
+
+  
 ### 🚀 X-UI Manager Script
 
-<div align="center">
 
 ### ⚡ Powerful All-in-One Management Script for 3x-ui / X-UI
 
