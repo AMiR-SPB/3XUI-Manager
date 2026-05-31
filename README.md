@@ -1,12 +1,19 @@
 <div align="center">
 
-  
 ### 🚀 X-UI Manager Script
 
+![Bash](https://img.shields.io/badge/Bash-Script-green)
+![Linux](https://img.shields.io/badge/Linux-Debian%20%7C%20Ubuntu-blue)
+![Version](https://img.shields.io/badge/Version-1.0-orange)
+![Maintained](https://img.shields.io/badge/Maintained-Yes-brightgreen)
 
-### ⚡ Powerful All-in-One Management Script for 3x-ui / X-UI
+</div>
 
-**Install • Update • Backup • Restore • Client Management • Automation**
+> ⚡ Powerful all-in-one management script for **3x-ui / X-UI** servers.
+
+<div align="center">
+
+### 🛠️ Install • Update • Backup • Restore • Automation • Client Management
 
 Developed with ❤️ by **AMiR SPB**
 
@@ -166,7 +173,7 @@ Access the X-UI management menu from anywhere in the terminal.
 ## 🏗️ Installation
 
 ```bash
-wget https://raw.githubusercontent.com/AMiR-SPB/xui-manager/main/xui-manager.sh
+wget https://raw.githubusercontent.com/YOUR_USERNAME/xui-manager/main/xui-manager.sh
 
 chmod +x xui-manager.sh
 
@@ -200,21 +207,21 @@ chmod +x xui-manager.sh
 | ARM64        | ✅         |
 | ARMv7        | ✅         |
 
-Automatic detection is performed during installation and updates.
+Automatic architecture detection is performed during installation and updates.
 
 ---
 
 ## 🔒 Security Recommendations
 
-After the first login:
+After first login:
 
-* 🔐 Change the default password
-* 👤 Change the default username
-* 🌐 Change the default port
-* 🔗 Change the web path
+* 🔐 Change default password
+* 👤 Change default username
+* 🌐 Change panel port
+* 🔗 Change web path
 * 🛡️ Restrict panel access when possible
 
-**Never use default credentials on production servers.**
+> ⚠️ Never keep default credentials on production servers.
 
 ---
 
@@ -222,19 +229,29 @@ After the first login:
 
 **AMiR SPB**
 
-📨 Telegram:
-
-```text
-@Amir_SPB
-```
+📨 Telegram: **@Amir_SPB**
 
 ---
 
-## ❤️ Special Notes
+## ❤️ Why This Script?
 
-This project was created to simplify X-UI management and reduce repetitive administrative tasks.
+Managing X-UI servers manually can be repetitive and time-consuming.
 
-If this project helps you, consider giving it a ⭐ on GitHub.
+This project was built to automate common administrative tasks and provide a clean interactive interface for server administrators.
+
+Whether you're managing a single server or multiple production nodes, X-UI Manager helps reduce maintenance time and simplify operations.
+
+---
+
+## ⭐ Support
+
+If you find this project useful:
+
+⭐ Star the repository
+
+🔄 Share it with others
+
+🐛 Report issues and suggest improvements
 
 ---
 
@@ -248,6 +265,8 @@ Use at your own responsibility.
 
 <div align="center">
 
-### ⭐ Star the repository if you find it useful ⭐
+### 🚀 Made with ❤️ by AMiR SPB
+
+⭐ Star the repository if you find it useful ⭐
 
 </div>
